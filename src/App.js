@@ -1,13 +1,22 @@
 import React, { useState, useEffect } from 'react';
 import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid } from 'recharts';
-import { Droplets, Thermometer, Wind, Zap, Leaf } from 'lucide-react';
+import { Droplets, Thermometer, Wind, Zap, Leaf, LogOut } from 'lucide-react';
+import { createClient } from '@supabase/supabase-js';
 import Sensores from './pages/Sensores';
 import Clima from './pages/Clima';
 import Historico from './pages/Historico';
+import Login from './Login';
 import './App.css';
 
+const supabase = createClient(
+  'https://ppfhghmhcnuztxtsonsm.supabase.co',
+  'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InBwZmhnaG1oY251enR4dHNvbnNtIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODM3MjE1MTAsImV4cCI6MjA5OTI5NzUxMH0.wymZTk-1oMcfXrAt5NaY4q2c6TEHn_Q_gvh197wX440'
+);
+
 export default function App() {
-  const [page, setPage] = useState('visao');
+  const [page, setPage]           = useState('visao');
+  const [loggedIn, setLoggedIn]   = useState(false);
+  const [checkingAuth, setCheckingAuth] = useState(true);
   const [data, setData] = useState({
     soil_moisture: '--',
     air_temperature: '--',
@@ -18,12 +27,29 @@ export default function App() {
     confidence: 0,
   });
 
-  const [history, setHistory] = useState([]);
-  const [alerts, setAlerts] = useState([]);
+  const [history, setHistory]     = useState([]);
+  const [alerts, setAlerts]       = useState([]);
   const [lastUpdate, setLastUpdate] = useState('--');
   const [connected, setConnected] = useState(false);
 
+  // Verifica sessão ao carregar
   useEffect(() => {
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      setLoggedIn(!!session);
+      setCheckingAuth(false);
+    });
+
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+      setLoggedIn(!!session);
+    });
+
+    return () => subscription.unsubscribe();
+  }, []);
+
+  // Busca dados do backend
+  useEffect(() => {
+    if (!loggedIn) return;
+
     const fetchData = async () => {
       try {
         const response = await fetch('http://localhost:3002/api/latest');
@@ -59,13 +85,13 @@ export default function App() {
         if (json.soil_moisture < 20) {
           setAlerts(prev => [{
             type: 'red',
-            text: `Solo crítico: ${json.soil_moisture}% de umidade`,
+            text: `Solo critico: ${json.soil_moisture}% de umidade`,
             time: timeStr
           }, ...prev].slice(0, 5));
         } else if (json.decision === 'irrigar') {
           setAlerts(prev => [{
             type: 'yellow',
-            text: `Irrigação recomendada — solo em ${json.soil_moisture}%`,
+            text: `Irrigacao recomendada - solo em ${json.soil_moisture}%`,
             time: timeStr
           }, ...prev].slice(0, 5));
         }
@@ -78,18 +104,30 @@ export default function App() {
     fetchData();
     const interval = setInterval(fetchData, 5000);
     return () => clearInterval(interval);
-  }, []);
+  }, [loggedIn]);
+
+  const handleLogout = async () => {
+    await supabase.auth.signOut();
+    setLoggedIn(false);
+  };
 
   const menuItems = [
-    { id: 'visao',    label: 'Visão Geral', icon: <Droplets size={16} /> },
-    { id: 'sensores', label: 'Sensores',    icon: <Thermometer size={16} /> },
-    { id: 'clima',    label: 'Clima',       icon: <Wind size={16} /> },
-    { id: 'historico',label: 'Histórico',   icon: <Zap size={16} /> },
+    { id: 'visao',     label: 'Visao Geral', icon: <Droplets size={16} /> },
+    { id: 'sensores',  label: 'Sensores',    icon: <Thermometer size={16} /> },
+    { id: 'clima',     label: 'Clima',       icon: <Wind size={16} /> },
+    { id: 'historico', label: 'Historico',   icon: <Zap size={16} /> },
   ];
+
+  if (checkingAuth) return (
+    <div style={{ minHeight: '100vh', background: '#0a0e1a', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+      <p style={{ color: '#64748b' }}>Carregando...</p>
+    </div>
+  );
+
+  if (!loggedIn) return <Login onLogin={() => setLoggedIn(true)} />;
 
   return (
     <div className="dashboard">
-      {/* Sidebar */}
       <aside className="sidebar">
         <div className="sidebar-logo">
           <Leaf size={22} color="#38bdf8" />
@@ -100,39 +138,41 @@ export default function App() {
         </div>
         <ul className="sidebar-menu">
           {menuItems.map(item => (
-            <li
-              key={item.id}
-              className={page === item.id ? 'active' : ''}
-              onClick={() => setPage(item.id)}
-            >
+            <li key={item.id} className={page === item.id ? 'active' : ''} onClick={() => setPage(item.id)}>
               {item.icon} {item.label}
             </li>
           ))}
         </ul>
+        <div style={{ padding: '0 20px 24px' }}>
+          <button onClick={handleLogout} style={{
+            display: 'flex', alignItems: 'center', gap: 8,
+            background: 'transparent', border: '1px solid #1e2a45',
+            borderRadius: 8, padding: '8px 12px', color: '#64748b',
+            fontSize: 13, cursor: 'pointer', width: '100%'
+          }}>
+            <LogOut size={14} /> Sair
+          </button>
+        </div>
       </aside>
 
-      {/* Main */}
       <main className="main">
-        {/* Topbar */}
         <div className="topbar">
           <div>
-            <h1>Olá, Andressa! 👋</h1>
-            <p>Aqui está o resumo do sistema hoje.</p>
+            <h1>Ola, Andressa!</h1>
+            <p>Aqui esta o resumo do sistema hoje.</p>
           </div>
           <div className="status-badge" style={{ borderColor: connected ? '#166534' : '#7f1d1d', background: connected ? '#0d2e1a' : '#2d0d0d' }}>
             <span className="status-dot" style={{ background: connected ? '#4ade80' : '#f87171' }}></span>
             <span style={{ color: connected ? '#4ade80' : '#f87171' }}>
-              {connected ? `Sistema Online — ${lastUpdate}` : 'Aguardando dados...'}
+              {connected ? `Sistema Online - ${lastUpdate}` : 'Aguardando dados...'}
             </span>
           </div>
         </div>
 
-        {/* Páginas */}
-        {page === 'sensores' && <Sensores data={data} />}
-        {page === 'clima'    && <Clima data={data} />}
-        {page === 'historico'&& <Historico />}
+        {page === 'sensores'  && <Sensores data={data} />}
+        {page === 'clima'     && <Clima data={data} />}
+        {page === 'historico' && <Historico />}
 
-        {/* Visão Geral */}
         {page === 'visao' && (
           <>
             <div className="cards">
@@ -150,7 +190,7 @@ export default function App() {
                   <span className="card-label">Temperatura</span>
                   <div className="card-icon orange"><Thermometer size={18} /></div>
                 </div>
-                <div className="card-value">{data.air_temperature !== '--' ? `${data.air_temperature}°C` : '--'}</div>
+                <div className="card-value">{data.air_temperature !== '--' ? `${data.air_temperature}C` : '--'}</div>
                 <div className="card-sub">Temperatura do ar</div>
               </div>
 
@@ -165,13 +205,13 @@ export default function App() {
 
               <div className="card">
                 <div className="card-header">
-                  <span className="card-label">Decisão do ML</span>
+                  <span className="card-label">Decisao do ML</span>
                   <div className="card-icon green"><Zap size={18} /></div>
                 </div>
                 <div className={`card-decision ${data.decision}`}>
-                  {data.decision === 'irrigar' ? '🚿 IRRIGAR' : data.decision === 'nao_irrigar' ? '⏸️ NÃO IRRIGAR' : '--'}
+                  {data.decision === 'irrigar' ? 'IRRIGAR' : data.decision === 'nao_irrigar' ? 'NAO IRRIGAR' : '--'}
                 </div>
-                <div className="card-sub">Confiança: {data.confidence}%</div>
+                <div className="card-sub">Confianca: {data.confidence}%</div>
                 <div className="confidence-bar">
                   <div className="confidence-fill" style={{ width: `${data.confidence}%` }}></div>
                 </div>
@@ -180,7 +220,7 @@ export default function App() {
 
             <div className="bottom-grid">
               <div className="chart-card">
-                <h3>Histórico — Umidade do Solo e Temperatura</h3>
+                <h3>Historico - Umidade do Solo e Temperatura</h3>
                 {history.length === 0 ? (
                   <p style={{ color: '#475569', fontSize: 13, marginTop: 16 }}>Aguardando dados do ESP32...</p>
                 ) : (
@@ -189,12 +229,9 @@ export default function App() {
                       <CartesianGrid strokeDasharray="3 3" stroke="#1e2a45" />
                       <XAxis dataKey="time" stroke="#475569" tick={{ fontSize: 11 }} />
                       <YAxis stroke="#475569" tick={{ fontSize: 11 }} />
-                      <Tooltip
-                        contentStyle={{ background: '#0d1225', border: '1px solid #1e2a45', borderRadius: 8 }}
-                        labelStyle={{ color: '#94a3b8' }}
-                      />
+                      <Tooltip contentStyle={{ background: '#0d1225', border: '1px solid #1e2a45', borderRadius: 8 }} labelStyle={{ color: '#94a3b8' }} />
                       <Line type="monotone" dataKey="umidade" stroke="#38bdf8" strokeWidth={2} dot={false} name="Umidade %" />
-                      <Line type="monotone" dataKey="temperatura" stroke="#fb923c" strokeWidth={2} dot={false} name="Temp °C" />
+                      <Line type="monotone" dataKey="temperatura" stroke="#fb923c" strokeWidth={2} dot={false} name="Temp C" />
                     </LineChart>
                   </ResponsiveContainer>
                 )}
@@ -202,9 +239,7 @@ export default function App() {
 
               <div className="alerts-card">
                 <h3>Alertas Recentes</h3>
-                {alerts.length === 0 && (
-                  <p style={{ color: '#475569', fontSize: 13 }}>Nenhum alerta ainda.</p>
-                )}
+                {alerts.length === 0 && <p style={{ color: '#475569', fontSize: 13 }}>Nenhum alerta ainda.</p>}
                 {alerts.map((a, i) => (
                   <div className="alert-item" key={i}>
                     <div className={`alert-dot ${a.type}`}></div>
