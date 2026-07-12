@@ -8,7 +8,7 @@ export default function Historico() {
   useEffect(() => {
     const fetchHistory = async () => {
       try {
-        const response = await fetch('http://localhost:3002/api/history');
+        const response = await fetch('https://irrigation-backend-production-219a.up.railway.app/api/history');
         const data = await response.json();
 
         const formatted = data.reverse().map(row => ({

@@ -52,7 +52,7 @@ export default function App() {
 
     const fetchData = async () => {
       try {
-        const response = await fetch('http://localhost:3002/api/latest');
+        const response = await fetch('https://irrigation-backend-production-219a.up.railway.app/api/latest');
         if (!response.ok) return;
         const json = await response.json();
         setConnected(true);
